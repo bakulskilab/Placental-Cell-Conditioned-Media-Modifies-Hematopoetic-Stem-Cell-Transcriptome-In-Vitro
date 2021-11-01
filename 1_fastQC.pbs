@@ -1,0 +1,36 @@
+#PBS -N fastqc_BeWo_Run_2567
+#PBS -M johndou@umich.edu
+#PBS -m abe
+#PBS -V
+
+#PBS -l walltime=24:00:00
+#PBS -l procs=1,pmem=2gb
+
+#PBS -q fluxod
+#PBS -A bakulski_fluxod
+#PBS -l qos=flux
+
+cat $PBS_NODEFILE
+
+module load fastqc/0.11.5
+
+for path in /nfs/turbo/bakulski1/People/johndou/BeWo_RNAseq/Run_2567/loch/Sample_119*; do
+
+	SAMPLEID="$(basename "${path}")"
+	
+	mkdir /nfs/turbo/bakulski1/People/johndou/BeWo_RNAseq/Run_2567_Output/fastQC/$SAMPLEID/
+	
+	fastqc \
+	/nfs/turbo/bakulski1/People/johndou/BeWo_RNAseq/Run_2567/loch/$SAMPLEID/*.fastq.gz \
+	--outdir=/nfs/turbo/bakulski1/People/johndou/BeWo_RNAseq/Run_2567_Output/fastQC/$SAMPLEID/
+
+done
+
+
+cd /nfs/turbo/bakulski1/People/johndou/BeWo_RNAseq/Run_2567_Output/fastQC/
+
+module load python-anaconda3
+python /nfs/turbo/bakulski1/People/johndou/import_multiqc.py
+
+multiqc \
+/nfs/turbo/bakulski1/People/johndou/BeWo_RNAseq/Run_2567_Output/fastQC/Sample_119*

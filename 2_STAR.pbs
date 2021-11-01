@@ -1,0 +1,37 @@
+#PBS -N STAR.2.6.0c_map
+#PBS -M johndou@umich.edu
+#PBS -m abe
+#PBS -j oe
+#PBS -V
+
+#PBS -q fluxod
+#PBS -A bakulski_fluxod
+#PBS -l qos=flux
+
+#PBS -l nodes=1:ppn=6:largemem,mem=64gb,walltime=72:00:00 
+
+cat $PBS_NODEFILE
+
+module load samtools
+
+for path in /nfs/turbo/bakulski1/People/johndou/BeWo_RNAseq/Run_2567/loch/Sample_119*; do
+	
+	SAMPLEID="$(basename "${path}")"
+	
+	rm -r /nfs/turbo/bakulski1/People/johndou/BeWo_RNAseq/Run_2567_Output/STAR/$SAMPLEID/
+	mkdir /nfs/turbo/bakulski1/People/johndou/BeWo_RNAseq/Run_2567_Output/STAR/$SAMPLEID/
+	
+	/nfs/turbo/bakulski1/Software/STAR/bin/Linux_x86_64_static/STAR \
+	--genomeDir /nfs/turbo/bakulski1/People/kyleac/Placenta_Sort_RNA/genomeReference/refSTARgenome/ \
+	--readFilesIn \
+	/nfs/turbo/bakulski1/People/johndou/BeWo_RNAseq/Run_2567/loch/$SAMPLEID/*.fastq.gz \
+	--readFilesCommand gunzip -c \
+	--runThreadN 6 \
+	--outFilterMultimapNmax 10 \
+	--outSAMmode Full \
+	--sjdbScore 2 \
+	--outFileNamePrefix \
+	/nfs/turbo/bakulski1/People/johndou/BeWo_RNAseq/Run_2567_Output/STAR/$SAMPLEID/ \
+	--outReadsUnmapped Fastx
+
+done

@@ -1,0 +1,402 @@
+---
+title: "RNAseq"
+author: "John Dou"
+date: "April 15, 2019"
+output:
+  word_document: default
+  html_document: default
+---
+
+```{r setup, include=FALSE}
+knitr::opts_chunk$set(echo = TRUE)
+```
+
+## Example Code for using DESeq2 to analyze data
+
+Commented code to install libraries from Bioconductor.
+
+DESeq2 is all that is needed to run analysis.
+
+EnhancedVolcano is needed to make the volcano plots.
+
+knitr is not required for analysis, and only used for formatting of this document.
+
+```{r lib, echo=TRUE, results='hide', message=F, warning=F, include=FALSE}
+# if (!requireNamespace("BiocManager", quietly = TRUE))
+#     install.packages("BiocManager")
+# BiocManager::install("topGO")
+# BiocManager::install("DESeq2")
+# BiocManager::install("EnhancedVolcano")
+library(DESeq2)
+library(EnhancedVolcano)
+library(topGO)
+
+library(knitr)
+
+path <- "L:/My Drive/Misc/RNAseq/K562_BeWo" #C:/Users/John/Google Drive/Misc/RNAseq/K562_BeWo
+```
+
+## Files to Load
+
+Load table of counts per gene, gene info, and meta data. Change work directory to where files are located.
+
+```{r files, include=FALSE}
+setwd(path)
+load('tbl.counts.rda')
+load('gene.info.rda')
+load('meta.rda')
+```
+
+## Loading into DESeq2
+
+Note: your model design is saved into the object.
+
+```{r , include=FALSE}
+meta$day <- factor(as.numeric(factor(meta$day)))
+meta$group.ID <- factor(meta$group.ID,levels=c('vc_minusBeWo','vc_plusBeWo','h10_plusBeWo'))
+deseq.ds <- DESeqDataSetFromMatrix(countData = tbl.counts,
+                                   colData = meta,
+                                   design = ~ group.ID + day)
+```
+
+## PCA plots
+
+The vst() function gives variance stablizing transformed values for use in visualization. Keep untransformed counts for fitting the model, as normalization and other steps will be done at that stage.
+
+```{r , eval=FALSE, include=FALSE}
+vsd <- vst(deseq.ds)
+library(ggpubr)
+
+p1 <- plotPCA(vsd, "group.ID") +
+  scale_color_discrete(name='Treatment',
+                       labels=c('Control','BeWo','MEPH + BeWo'),
+                       guide=guide_legend(title.position='top', title.hjust=0.5)) +
+  theme(legend.position = 'top',
+        legend.key = element_blank()) +
+  xlab("Principal Component 1") + ylab("Principal Component 2") 
+
+p2 <- plotPCA(vsd, "day") +
+  scale_color_discrete(name='Day',
+                       guide=guide_legend(title.position='top', title.hjust=0.5)) +
+  theme(legend.position = 'top',
+        legend.key = element_blank()) +
+  xlab("Principal Component 1") + ylab("Principal Component 2")
+
+
+
+pdf('PC_plots.pdf')
+  ggarrange(p1,p2, labels=c('A','B'),ncol=2,nrow=1)
+dev.off()
+```
+
+## Model fitting
+
+Its only one line of code to run everything. Estimation of normalization, dispersion, model fitting, and filtering are all done in the background. If you want to change default settings, you can run individual steps separately with specified parameters.
+
+```{r , include=FALSE}
+deseq.res <- DESeq(deseq.ds)
+```
+
+Use this function to list out the coefficients
+
+```{r , eval=FALSE, include=FALSE}
+resultsNames(deseq.res)
+
+```
+
+To get log fold change estimates, grab the coefficient or specify a contrast:
+
+```{r results, include=FALSE}
+
+#h10_plusBeWo vs vc_minusBewo
+res.h10b_vcm <- results(deseq.res, name="group.ID_h10_plusBeWo_vs_vc_minusBeWo")
+
+
+#vc_plusBeWo vs vc_minusBewo
+res.vcb_vcm <- results(deseq.res, name="group.ID_vc_plusBeWo_vs_vc_minusBeWo")
+
+
+#h10_plusBeWo vs vc_plusBewo
+res.h10b_vcb <- results(deseq.res, contrast=c("group.ID","h10_plusBeWo","vc_plusBeWo"), independentFiltering = T)
+
+```
+
+Filtered genes have the adjusted p-value set to NA. Other columns in the results file may also be set to NA depending on reasons for filtering.
+
+Filtering differs between contrasts, choose a minimun set.
+
+```{r filter, include=FALSE}
+head(res.h10b_vcm)
+
+
+summary(res.h10b_vcb)
+
+summary(res.vcb_vcm)
+
+
+filts <- sapply(list(res.h10b_vcb,res.vcb_vcm), function(x) attr(x,"metadata")$filterThreshold)
+filt <- max(filts)
+```
+
+Sidenote: Another option is to do a LRT, where you set a reduced model.
+
+```{r lrt, eval=FALSE, include=FALSE}
+deseq.LRT <- DESeq(deseq.ds, test='LRT', reduced = ~ day)
+
+#more examples using contrast statements:
+res.h10plusBeWo_vs_vcplusBeWo <- results(deseq.LRT, contrast=c("group.ID","h10_plusBeWo","vc_plusBeWo"))
+res.h10plusBewo_vs_vcminlusBewo <- results(deseq.LRT, contrast=c("group.ID","h10_plusBeWo","vc_minusBeWo"))
+
+#note that the test statistic and p-values are same, since they come from the LRT test comparing the
+#model with test condition vs model with only day, only log2FC changes to report your specified contrast 
+head(res.h10plusBeWo_vs_vcplusBeWo)
+head(res.h10plusBewo_vs_vcminlusBewo)
+```
+
+## Volcano Plots
+
+The EnhancedVolcano package is designed to work nice with DESeq2 output.
+
+```{r volcano 1, include=FALSE}
+reorder <- deseq.res
+reorder$group.ID <- relevel(reorder$group.ID,'vc_plusBeWo')
+design(reorder) <- ~group.ID + day
+reorder <- nbinomWaldTest(reorder)
+resultsNames(reorder)
+reorder.h10b_vcb <- results(reorder, name="group.ID_h10_plusBeWo_vs_vc_plusBeWo")
+filt.h10b_vcb <- reorder[reorder.h10b_vcb$baseMean > filt, ]
+reorder.h10b_vcb <- results(filt.h10b_vcb, name='group.ID_h10_plusBeWo_vs_vc_plusBeWo', independentFiltering = FALSE)
+
+#some things don't have gene symbols and only an ensembl id
+gene.info.h10 <- gene.info[rownames(reorder.h10b_vcb),]
+gene.labels.h10 <- ifelse(is.na(gene.info.h10$hgnc_symbol) | gene.info.h10$hgnc_symbol=="", gene.info.h10$ensembl_gene_id, gene.info.h10$hgnc_symbol)
+
+
+shrink.h10b_vcb2 <- lfcShrink(filt.h10b_vcb, coef="group.ID_h10_plusBeWo_vs_vc_plusBeWo", res=reorder.h10b_vcb, type='apeglm')
+EnhancedVolcano(shrink.h10b_vcb2, 
+                title='',
+                subtitle='',
+                caption='',
+                legendVisible=FALSE,
+                lab=gene.labels, 
+                x='log2FoldChange',
+                y='padj',
+                ylab = bquote(~-Log[10]~adjusted~italic(P)),
+                pCutoff=0.05,
+                FCcutoff=1.0,
+                transcriptLabSize = 3.5,
+                transcriptPointSize = 1.8,
+                colAlpha = 1,
+                drawConnectors=TRUE)
+
+# tab.h10b_vcb <- shrink.h10b_vcb[!is.na(shrink.h10b_vcb$padj),]
+# #tab.h10b_vcb <- subset(tab.h10b_vcb, padj<0.05)
+# names1 <- gene.info[rownames(tab.h10b_vcb),'hgnc_symbol']
+# tab.h10b_vcb$gene_symbol <- names1
+# tab.h10b_vcb <- tab.h10b_vcb[order(tab.h10b_vcb$padj),c(7,1:6)]
+# kable(tab.h10b_vcb[1:10,], format="markdown", digits=c(3,30,30))
+# write.csv(tab.h10b_vcb,file='results_h10.csv')
+
+tab.h10b_vcb <- shrink.h10b_vcb2
+tab.h10b_vcb$gene_symbol <- gene.labels.h10
+tab.h10b_vcb <-  tab.h10b_vcb[!is.na(tab.h10b_vcb$padj),]
+tab.h10b_vcb <- tab.h10b_vcb[order(tab.h10b_vcb$padj),c(6,1:5)]
+write.csv(tab.h10b_vcb,file=file.path(path,'Results/results_h10_v2.csv'),row.names = FALSE)
+
+library(openxlsx)
+tab.h10orderFC <- tab.h10b_vcb[order(-abs(tab.h10b_vcb$log2FoldChange)),]
+write.xlsx(list("order_by_p"=tab.h10b_vcb,"order_by_fc"=tab.h10orderFC), row.names=TRUE,
+           file=file.path(path,'Results/results_h10_order_v2.xlsx'))
+
+```
+
+
+```{r volcano 2, include=FALSE}
+shrink.vcb_vcm <- lfcShrink(deseq.res, coef="group.ID_vc_plusBeWo_vs_vc_minusBeWo", res=res.vcb_vcm, type='apeglm')
+
+EnhancedVolcano(shrink.vcb_vcm, 
+                title='',
+                subtitle='',
+                caption='',
+                legendVisible=FALSE,
+                lab=gene.labels, 
+                selectLab=c('TPM4','S1PR3','JUN','CGA'),
+                x='log2FoldChange',
+                y='padj',
+                ylab = bquote(~-Log[10]~adjusted~italic(P)),
+                #xlim=c(-2,7.5),
+                pCutoff=0.05,
+                FCcutoff=1.0,
+                transcriptLabSize = 3.5,
+                transcriptPointSize = 1.8,
+                colAlpha = 1,
+                transcriptLabFace='bold')
+
+tab.vcb_vcm <- shrink.vcb_vcm
+tab.vcb_vcm$gene_symbol <- gene.labels
+tab.vcb_vcm <-  tab.vcb_vcm[!is.na(tab.vcb_vcm$padj),]
+#tab.vcb_vcm <- subset(tab.vcb_vcm, padj<1e-10)
+tab.vcb_vcm <- tab.vcb_vcm[order(tab.vcb_vcm$padj),c(6,1:5)]
+# kable(tab.vcb_vcm[1:10,], format="markdown", digits=c(3,60,60))
+write.csv(tab.vcb_vcm,file='results_bewo.csv')
+
+library(openxlsx)
+tab.orderFC <- tab.vcb_vcm[order(-abs(tab.vcb_vcm$log2FoldChange)),]
+write.xlsx(list("order_by_p"=tab.vcb_vcm,"order_by_fc"=tab.orderFC), rowNames=T,
+           file=file.path(path,'Results/results_bewo_order.xlsx'))
+
+```
+
+```{r volcano 3, eval=FALSE, include=FALSE}
+shrink.h10b_vcm <- lfcShrink(deseq.res, coef="group.ID_h10_plusBeWo_vs_vc_minusBeWo", res=res.h10b_vcm)
+EnhancedVolcano(shrink.h10b_vcm, 
+                title='h10+bewo vs vc-bewo',
+                lab=gene.labels, 
+                x='log2FoldChange',
+                y='padj',
+                ylab = bquote(~-Log[10]~adjusted~italic(P)),
+                pCutoff=1e-10,
+                FCcutoff=1.0,
+                transcriptLabSize = 3.5,
+                transcriptPointSize = 1.8,
+                colAlpha = 1,
+                DrawConnectors = TRUE)
+
+tab.h10b_vcm <- shrink.h10b_vcm[!is.na(shrink.h10b_vcm$padj),c(2,5,6)]
+tab.h10b_vcm <- subset(tab.h10b_vcm, padj<1e-10)
+names3 <- gene.info[rownames(tab.h10b_vcm),'hgnc_symbol']
+rownames(tab.h10b_vcm) <- ifelse(is.na(names3) | names3=="", rownames(tab.h10b_vcm),names3)
+tab.h10b_vcm <- tab.h10b_vcm[order(-abs(tab.h10b_vcm$log2FoldChange)),]
+kable(tab.h10b_vcm[1:10,], format="markdown", digits=c(3,90,90))
+```
+
+# h10+bewo vs vc-bewo effect 
+# compared to 
+# vc+bewo vs vc-bewo effect
+```{r , eval=FALSE, include=FALSE}
+smoothScatter(shrink.h10b_vcm$log2FoldChange,shrink.vcb_vcm$log2FoldChange)
+cor(shrink.h10b_vcm$log2FoldChange,shrink.vcb_vcm$log2FoldChange,use='complete.obs')
+smoothScatter(-log(shrink.h10b_vcm$padj),-log(shrink.vcb_vcm$padj))
+cor(-log(shrink.h10b_vcm$padj),-log(shrink.vcb_vcm$padj),use='complete.obs')
+```
+
+# h10+bewo vs vc-bewo effect
+# compared to
+# h10+bewo vs vc+bewo effect
+```{r , eval=FALSE, include=FALSE}
+smoothScatter(shrink.h10b_vcm$log2FoldChange,shrink.h10b_vcb$log2FoldChange)
+cor(shrink.h10b_vcm$log2FoldChange,shrink.h10b_vcb$log2FoldChange,use='complete.obs')
+smoothScatter(-log(shrink.h10b_vcm$padj),-log(shrink.h10b_vcb$padj))
+cor(-log(shrink.h10b_vcm$padj),-log(shrink.h10b_vcb$padj),use='complete.obs')
+```
+
+# h10+bewo vs vc+bewo effect
+# compared to
+# vc+bewo vs vc-bewo effect
+```{r, eval=FALSE, include=FALSE}
+
+smoothScatter(shrink.h10b_vcb2$log2FoldChange,shrink.vcb_vcm$log2FoldChange)
+cor(shrink.h10b_vcb2$log2FoldChange,shrink.vcb_vcm$log2FoldChange,use='complete.obs')
+smoothScatter(-log(shrink.h10b_vcb2$padj),-log(shrink.vcb_vcm$padj))
+cor(-log(shrink.h10b_vcb2$padj),-log(shrink.vcb_vcm$padj),use='complete.obs',method='spearman')
+
+```
+
+## Pathway analysis
+
+```{r LRpath}
+library(org.Hs.eg.db)
+
+#DE genes results
+bewo <- shrink.vcb_vcm[!is.na(shrink.vcb_vcm$padj),]
+h10 <- shrink.h10b_vcb2[!is.na(shrink.h10b_vcb2$padj),] 
+
+
+### write input files for LR path according to instructions for RNAenrich
+
+norm.counts <- counts(deseq.res, normalized=T)
+
+
+#bewo
+bewo.counts <- norm.counts[match(rownames(bewo),rownames(tbl.counts)),]
+bewo.counts <- bewo.counts[,colnames(bewo.counts) %in% meta[meta$group.ID %in% c('vc_plusBeWo','vc_minusBeWo'),'unique.ID']]
+bewo.gene <- gene.info[rownames(bewo.counts),'entrezgene']
+bewo.LR <- data.frame(geneid=bewo.gene,
+                        PValue=bewo$pvalue,
+                        logFC=bewo$log2FoldChange,
+                        norm_avg_readcount=rowMeans(bewo.counts))
+bewo.LR <- bewo.LR[!is.na(bewo.LR$geneid),]
+bewo.LR <- bewo.LR[order(bewo.LR$PValue),]
+write.table(bewo.LR, sep="\t", row.names=FALSE, quote=FALSE, file=file.path(path,"Results/LRpath/bewo_LR_input.txt"))
+
+#h10
+h10.counts <- norm.counts[match(rownames(h10),rownames(tbl.counts)),]
+h10.counts <- h10.counts[,colnames(h10.counts) %in% meta[meta$group.ID %in% c('vc_plusBeWo','h10_plusBeWo'),'unique.ID']]
+h10.gene <- gene.info[rownames(h10.counts),'entrezgene']
+h10.LR <- data.frame(geneid=h10.gene,
+                        PValue=h10$pvalue,
+                        logFC=h10$log2FoldChange,
+                        norm_avg_readcount=rowMeans(h10.counts))
+h10.LR <- h10.LR[!is.na(h10.LR$geneid),]
+h10.LR <- h10.LR[order(h10.LR$PValue),]
+write.table(h10.LR, sep="\t", row.names=FALSE, quote=FALSE, file=file.path(path,"Results/LRpath/h10_LR_input.txt"))
+```
+#After LRpath
+```{r}
+library(openxlsx)
+LR.bewo <- read.xlsx(file.path(path,'Results/LRpath/bewo_LRpath_results.xlsx'))
+LR.h10 <- read.xlsx(file.path(path,'Results/LRpath/h10_LRpath_results.xlsx'))
+
+
+LR.bewo <- read.table(file.path(path,"Results/LRpath/RNAenrich_vcplusbewo_vs_vcminusbewo.txt"),header=T, sep='\t', comment.char="", quote="")
+LR.h10 <- read.table(file.path(path,"Results/LRpath/RNAenrich_h10plusbewo_vs_vcplusbewo.txt"),header=T, sep='\t', comment.char="", quote="")
+
+
+LR.bewo <- LR.bewo[LR.bewo$ConceptType=="GOBP",]
+LR.h10 <- LR.h10[LR.h10$ConceptType=="GOBP",]
+
+write.csv(LR.bewo, file=file.path(path,"Results/LRpath/RNAenrich_vcplusbewo_vs_vcminusbewo.csv"), row.names=F)
+write.csv(LR.h10, file=file.path(path,"Results/LRpath/RNAenrich_h10plusbewo_vs_vcplusbewo.csv"), row.names=F)
+
+
+head(LR.bewo)
+head(LR.h10)
+
+top.bewo <- LR.bewo[LR.bewo$FDR<0.01,]
+top.h10 <- LR.h10[LR.h10$FDR<0.01,]
+ 
+dim(top.bewo) #372
+dim(top.h10) #273
+
+length(intersect(top.bewo$Id,top.h10$Id)) #66
+```
+
+
+```{r desctab, include=FALSE}
+reads <- apply(tbl.counts,2,sum)
+genes <- apply(tbl.counts,2,FUN=function(x){ length(which(x>0))})
+
+desc.table <- meta
+names(desc.table) <- c('Sample','Treatment_Group','Day')
+desc.table$Day <- as.numeric(factor(desc.table$Day))
+desc.table$n_reads <- reads
+desc.table$n_genes <- genes
+desc.table <- desc.table[order(desc.table$Treatment_Group),]
+write.csv(desc.table,file='TableX.csv')
+
+fdr.h10 <- tab.h10b_vcb[tab.h10b_vcb$padj<0.05,'gene_symbol']
+# paste0(paste(fdr.h10[1:(length(fdr.h10)-1)],collapse=', '),' and ', fdr.h10[length(fdr.h10)])
+
+toplfc.bewo <- head(tab.vcb_vcm[order(-abs(tab.vcb_vcm$log2FoldChange)),])
+# paste0(paste(toplfc.bewo$gene_symbol[1:3],collapse=', '),' and ', toplfc.bewo$gene_symbol[4])
+# paste0(paste(tab.vcb_vcm$gene_symbol[1:3],collapse=', '),' and ', tab.vcb_vcm$gene_symbol[4])
+
+p.gene <- round(summary(aov(n_genes~Treatment_Group,data=desc.table))[[1]]$'Pr(>F)'[1],2)
+p.read <- round(summary(aov(n_reads~Treatment_Group,data=desc.table))[[1]]$'Pr(>F)'[1],2)
+```
+
+  Our experiment consisted of three treatments: a control, treatment with BeWo placental media, and treatment with phthalate and BeWo placental media. Each group had four samples. Following alignmnet and quantification, samples had between `r format(min(reads),big.mark=',')` to `r format(max(reads),big.mark=',')` reads assigned to features numbering from `r format(min(genes),big.mark=',')` to `r format(max(genes),big.mark=',')` (Table X). Number of reads per sample did not differ by treatment group (ANOVA p-value = `r p.read`), nor did number of genes per sample (ANOVA p-value = `r p.gene`). In principal component plots, we observed clustering by treatment group, and by culture date (Figure X). 
+  We evaluated the effect of phthalate by examining genes differentially expressed between the phthalte+placental media group and the placental media group. After filtering for low normalized mean counts a total of `r table(!is.na(shrink.h10b_vcb2$padj))["TRUE"]` genes remained in analysis. There were `r table(shrink.h10b_vcb2$padj<0.05)['TRUE']` genes with adjusted p-value < 0.05, and `r table(abs(shrink.h10b_vcb2$log2FoldChange)>1.0)['TRUE']` genes with log-fold change > 1.0. No genes met both these conditions (Figure Y). The FDR significant genes are `r paste0(paste(fdr.h10[1:(length(fdr.h10)-1)],collapse=', '),' and ', fdr.h10[length(fdr.h10)])` (Table Y). 
+   We evaluated the effect of placental media by examining genes differentially expressed between the placental media group and the control group. Following filtering of genes with low normalized mean counts, `r table(!is.na(shrink.vcb_vcm$padj))["TRUE"]` genes were analyzed. There were `r table(shrink.vcb_vcm$padj<0.05)['TRUE']` FDR genes differentially expressed by placental media, `r table(abs(shrink.vcb_vcm$log2FoldChange)>1.0)['TRUE']` genes with log-fold change > 1.0, and `r table(abs(shrink.vcb_vcm$log2FoldChange)>1.0 & shrink.vcb_vcm$padj<0.05)['TRUE']` genes met both of these criteria (Figure Z). Top differentially expressed genes by adjusted p-value are `r paste0(paste(tab.vcb_vcm$gene_symbol[1:3],collapse=', '),' and ', tab.vcb_vcm$gene_symbol[4])` (Table Z1), while top genes by shrunk log-fold change values are `r paste0(paste(toplfc.bewo$gene_symbol[1:3],collapse=', '),' and ', toplfc.bewo$gene_symbol[4])`. Since a large number of genes had FDR significance, we examined top pathways of genes at a FDR < 1e-4 level, of which there were  `r table(shrink.vcb_vcm$padj<1e-4)['TRUE']` genes. No gene sets were FDR significant. Top gene sets with FDR < 0.2 include `r paste0(paste(res$Term[1],collapse=', '),' and ', res$Term[2])` Table(Z2).
+  
+  

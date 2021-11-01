@@ -1,0 +1,30 @@
+#PBS -N qorts
+#PBS -M johndou@umich.edu
+#PBS -m abe
+#PBS -j oe
+#PBS -V
+
+#PBS -q fluxod
+#PBS -A bakulski_fluxod
+#PBS -l qos=flux
+
+#PBS -l nodes=1:ppn=1,mem=20gb,walltime=24:00:00 
+
+cat $PBS_NODEFILE
+
+
+for path in /nfs/turbo/bakulski1/People/johndou/BeWo_RNAseq/Run_2567/loch/Sample_119*; do
+	
+	SAMPLEID="$(basename "${path}")"
+	
+	rm -r /nfs/turbo/bakulski1/People/johndou/BeWo_RNAseq/Run_2567_Output/QoRTs_QC/$SAMPLEID/
+	mkdir /nfs/turbo/bakulski1/People/johndou/BeWo_RNAseq/Run_2567_Output/QoRTs_QC/$SAMPLEID/
+	
+  java -Xmx16G -jar /nfs/turbo/bakulski1/People/johndou/BeWo_RNAseq/QoRTs.jar QC\
+  --stranded \
+  --singleEnded \
+  /nfs/turbo/bakulski1/People/johndou/BeWo_RNAseq/Run_2567_Output/STAR/$SAMPLEID/Aligned.out.sorted  \
+  /nfs/turbo/bakulski1/People/kyleac/Placenta_Sort_RNA/genomeReference/gtfAnnotation/gencode.v28.annotation.gtf  \
+  /nfs/turbo/bakulski1/People/johndou/BeWo_RNAseq/Run_2567_Output/QoRTs_QC/$SAMPLEID/
+ 
+done

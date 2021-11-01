@@ -1,0 +1,32 @@
+#PBS -N featureCount_BeWo
+#PBS -M johndou@umich.edu
+#PBS -m abe
+#PBS -V
+
+#PBS -q fluxod
+#PBS -A bakulski_fluxod
+#PBS -l qos=flux
+
+#PBS -l nodes=3:ppn=3,pmem=3500mb,walltime=72:00:00
+
+cat $PBS_NODEFILE
+
+module load subread/1.6.1
+module load samtools
+
+for path in /nfs/turbo/bakulski1/People/johndou/BeWo_RNAseq/Run_2567/loch/Sample_119*; do
+	
+	SAMPLEID="$(basename "${path}")"
+	
+  cd /nfs/turbo/bakulski1/People/johndou/BeWo_RNAseq/Run_2567_Output/STAR/$SAMPLEID/
+ 
+	featureCounts \
+	-T 9 \
+	-s 2 \
+	-t exon \
+	-g gene_id \
+	-a /nfs/turbo/bakulski1/People/kyleac/Placenta_Sort_RNA/genomeReference/gtfAnnotation/gencode.v28.annotation.gtf \
+	-o /nfs/turbo/bakulski1/People/johndou/BeWo_RNAseq/Run_2567_Output/featureCounts/$SAMPLEID/feature_counts \
+	Aligned.out.sorted
+	
+done
