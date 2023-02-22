@@ -1,5 +1,11 @@
 # Placental cell conditioned media modifies hematopoietic stem cell transcriptome in vitro
 
+## Citation Information
+
+Harris SM, Su AL, Dou JF, Loch-Caruso R, Elkin ER, Bakulski KM. 2022. Placental cell conditioned media modifies hematopoietic stem cell transcriptome in vitro. In review
+
+This Github repository contains the data management and analytic scripts to produce the following manuscript: Placental cell conditioned media modifies hematopoietic stem cell transcriptome in vitro
+
 ## Abstract
 
 Background: Factors secreted from the placenta into maternal and fetal circulation are important for maternal and fetal development during pregnancy. Maternal hematopoietic stem cells maintain maternal blood supply. The placenta is an early site of fetal hematopoiesis, and placental hematopoietic stem cells are involved in the early stages of fetal blood cell differentiation. Cross-talk between placental cells and hematopoietic stem cells represents an important but understudied phenomenon of pregnancy. The impact of toxicant exposure on placental-immune cell communication is poorly understood. The goals of this study were to 1) determine if factors secreted from placental cells alter transcriptomic responses in hematopoietic stem cells in vitro and 2) if monoethylhexyl phthalate (MEHP), the major metabolite of the pollutant diethylhexyl phthalate, modifies these effects.
@@ -10,9 +16,6 @@ Results: K-562 cells treated with BeWo cell conditioned media differentially exp
 
 Conclusion: Hematopoietic stem cells are responsive to media that has been conditioned by placental cells, potentially impacting processes related to stem cell maintenance and proliferation, which may represent placental-immune communication important for development. The metabolite MEHP only had a modest impact on these responses at the single concentration tested. Future directions will investigate components of placental cell media (hormones, microvesicles, and proteins) contributing to hematopoietic cell signals. 
 
-## Citation Information
-
-Harris SM, Su AL, Dou JF, Loch-Caruso R, Elkin ER, Bakulski KM. 2022. Placental cell conditioned media modifies hematopoietic stem cell transcriptome in vitro. In review
 
 ## Script Files
 
